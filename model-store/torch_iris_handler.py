@@ -40,7 +40,11 @@ class PyTorchIrisHandler(BaseHandler):
         # Parse the input data
         #data = json.loads(data[0].get("body"))
         # Extract the JSON string from the bytearray
-        json_str = data[0]['body'].decode('utf-8')
+        print("print data", data)
+        print("print data['body']", data['body'])
+        print()
+
+        json_str = data['body'].decode('utf-8')
 
         # Parse the JSON string into a Python dictionary
         data = json.loads(json_str)
