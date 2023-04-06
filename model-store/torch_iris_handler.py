@@ -37,21 +37,8 @@ class PyTorchIrisHandler(BaseHandler):
         
     def preprocess(self, data):  # data는 torchserve에서 자동할당해줌. data (list): List of the data from the request input.
         print("preprocess start")
-        # Parse the input data
-        #data = json.loads(data[0].get("body"))
-        # Extract the JSON string from the bytearray
-        print("print data", data)
-        print("print data['body']", data['body'])
-        print()
-
-        json_str = data['body'].decode('utf-8')
-
-        # Parse the JSON string into a Python dictionary
-        data = json.loads(json_str)
-
-        # Access the list of instances
-        instances = data['instances']
-        preprocessed_data = torch.tensor(instances).float()
+        print("print data = ", data)
+        preprocessed_data = torch.tensor(data).float()
         print("preprocess end")
 
         return preprocessed_data  # return은 torch의 tensor형으로 변형해서
