@@ -26,7 +26,7 @@ kserve-pytorch
 ├── config
 │   ├── config.properties
 ├── model-store
-│   ├── my_torch_iris.mar
+│   ├── torch2.mar  # 코드 변경 시 삭제 후 model archiver 명령으로 재생성
 │   ├── torch_iris.py # 모델 파일
 │   ├── torch_iris_handler.py # 핸들러 파일
 │   ├── model.pt # 훈련된 모델 state dict 파일
@@ -44,7 +44,7 @@ job_queue_size=10
 enable_envvars_config=true
 install_py_dep_per_model=true
 model_store=/mnt/models/model-store
-model_snapshot={"name":"startup.cfg","modelCount":1,"models":{"my_torch_iris":{"1.0":{"defaultVersion":true,"marName":"my_torch_iris.mar","minWorkers":1,"maxWorkers":5,"batchSize":1,"maxBatchDelay":5000,"responseTimeout":120}}}}
+model_snapshot={"name":"startup.cfg","modelCount":1,"models":{"torch2":{"1.0":{"defaultVersion":true,"marName":"torch2.mar","minWorkers":1,"maxWorkers":5,"batchSize":1,"maxBatchDelay":5000,"responseTimeout":120}}}}
 
 ★model_snapshot안에 파라미터 하나라도 빠지면 서빙 안됨
 
@@ -84,7 +84,7 @@ KServe.get(name, namespace=namespace, watch=True, timeout_seconds=120)
 상태 진단
 k get pods -n kubeflow-user-example-com
 
-kubectl logs -f torch2-predictor-default-00001-deployment-5fb4b4c64-kvj69 -c kserve-container -n kubeflow-user-example-com
+kubectl logs -f torch2-predictor-default-00001-deployment-65d4f7c968-x59v8 -c kserve-container -n kubeflow-user-example-com
 kubectl logs -f torch2-predictor-default-00001-deployment-5fb4b4c64-kvj69 -c queue-proxy -n kubeflow-user-example-com
 kubectl logs -f torch2-predictor-default-00001-deployment-5fb4b4c64-kvj69 -c storage-initializer -n kubeflow-user-example-com
 
@@ -119,11 +119,40 @@ kubectl get pv pvc-d435ed54-fc0e-43dd-88aa-740f1010759c -n kubeflow-user-example
 /opt/local-path-provisioner/pvc-d435ed54-fc0e-43dd-88aa-740f1010759c_kubeflow-user-example-com_user1-volume/model-store
 /opt/local-path-provisioner/pvc-d435ed54-fc0e-43dd-88aa-740f1010759c_kubeflow-user-example-com_user1-volume/config
 
-inference 요청
+# inference 요청
 predict
-curl -X POST -H "Content-Type: application/json" -T C:/Users/ITNOMADS/Desktop/iris/iris-input.json http://torch-iris.kubeflow-user-example-com.svc.cluster.local/v2/models/torch-iris/infer
-curl -X POST -H "Content-Type: application/json" -T iris-input.json http://torch2.kubeflow-user-example-com.svc.cluster.local/v2/models/torch2/infer
 
+1. Dex 인증을 위한 토큰 발행(python, 토큰은 24시간 유효)
+
+import requests
+HOST = "http://192.168.0.5:30370"
+USERNAME = "user@example.com"
+PASSWORD = "12341234"
+session = requests.Session()
+response = session.get(HOST)
+headers = {
+    "Content-Type": "application/x-www-form-urlencoded",
+}
+data = {"login": USERNAME, "password": PASSWORD}
+session.post(response.url, headers=headers, data=data)
+session_cookie = session.cookies.get_dict()["authservice_session"]
+print(session_cookie)
+>>> 토큰 값 복사
+
+2. BASH 창을 통해 curl
+
+TOKEN=MTY4MDg0MDY4N3xOd3dBTkRVelNsWllTa2hEUjBGQlJsaFZWMFJJUzFKSU1rMUxNMEZWUjA1VlYxRk1UekpRVVZORVVWcElSVmxEVFVWV1drbENSMEU9fNOWzqG1qryUErGeGuKhuIrY84GPKufc8CF7uxmM3ZYm
+SERVICE_HOSTNAME=torch2.kubeflow-user-example-com.example.com
+
+## json 데이터로 넣을 때
+INPUT_DATA='{"instances": [[6.8, 2.8, 4.8, 1.4], [5.1, 3.5, 1.4, 0.2], [6.3, 2.5, 5.0, 1.9]]}'
+curl -v 192.168.0.5:30370/v2/models/torch2/infer -d "${INPUT_DATA}" -H "Cookie: authservice_session=${TOKEN}" -H "Host: ${SERVICE_HOSTNAME}"
+
+## json 파일 넣을 때
+curl -v 192.168.0.5:30370/v2/models/torch2/infer -d @iris-input.json -H "Cookie: authservice_session=${TOKEN}" -H "Host: ${SERVICE_HOSTNAME}"
+curl -v 192.168.0.5:30370/v2/models/torch2/infer -T iris-input.json -H "Cookie: authservice_session=${TOKEN}" -H "Host: ${SERVICE_HOSTNAME}"
+
+DEX 인증을 우회하는 것으로 설정하려면 https://1week.tistory.com/83 여기 확인
 
 # 참고사항
 
