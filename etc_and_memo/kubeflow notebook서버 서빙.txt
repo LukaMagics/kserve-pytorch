@@ -122,8 +122,9 @@ kubectl get pv pvc-d435ed54-fc0e-43dd-88aa-740f1010759c -n kubeflow-user-example
 # inference 요청
 predict
 
-1. Dex 인증을 위한 토큰 발행(python, 토큰은 24시간 유효)
+1A. Dex 인증을 위한 토큰 발행(토큰은 24시간 유효)
 
+## python 코드
 import requests
 HOST = "http://192.168.0.5:30370"
 USERNAME = "user@example.com"
@@ -137,7 +138,48 @@ data = {"login": USERNAME, "password": PASSWORD}
 session.post(response.url, headers=headers, data=data)
 session_cookie = session.cookies.get_dict()["authservice_session"]
 print(session_cookie)
->>> 토큰 값 복사
+
+or 브라우저 검사 도구에서 token값 복사
+
+1B. DEX 인증을 우회 ( https://1week.tistory.com/83 )
+공통 적용되는(All virtual host) dex 정책의 yaml 파일은 아래 명령어로 확인
+k get envoyfilters.networking.istio.io authn-filter -n istio-system -o yaml
+
+## 우회하는 filter 오브젝트를 추가 적용해야 함
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"networking.istio.io/v1alpha3","kind":"EnvoyFilter","metadata":{"annotations":{},"name":"bypass-auth-torch2","namespace":"istio-system"},"spec":{"configPatches":[{"applyTo":"VIRTUAL_HOST","match":{"routeConfiguration":{"vhost":{"name":"192.168.0.5:30370/v2/models/torch2/infer"}}},"patch":{"operation":"MERGE","value":{"per_filter_config":{"envoy.ext_authz":{"disabled":true}}}}}],"workloadSelector":{"labels":{"istio":"ingressgateway"}}}}
+  creationTimestamp: "2023-04-07T05:07:01Z"
+  generation: 2
+  name: bypass-auth-torch2
+  namespace: istio-system
+  resourceVersion: "1164798"
+  uid: 8fd0664d-7bd6-48a7-ac7f-b1d530337e4e
+spec:
+  configPatches:
+  - applyTo: VIRTUAL_HOST
+    match:
+      routeConfiguration:
+        vhost:
+          name: http://192.168.0.5:30370/v2/models/torch2/infer
+    patch:
+      operation: MERGE
+      value:
+        per_filter_config:
+          envoy.ext_authz:
+            disabled: true
+  workloadSelector:
+    labels:
+      istio: ingressgateway
+
+# yaml 적용
+kubectl apply -f bypass-auth-torch2.yaml
+
+# 적용됐는지 확인
+k get envoyfilters.networking.istio.io -n istio-system
 
 2. BASH 창을 통해 curl
 
@@ -152,7 +194,14 @@ curl -v 192.168.0.5:30370/v2/models/torch2/infer -d "${INPUT_DATA}" -H "Cookie: 
 curl -v 192.168.0.5:30370/v2/models/torch2/infer -d @iris-input.json -H "Cookie: authservice_session=${TOKEN}" -H "Host: ${SERVICE_HOSTNAME}"
 curl -v 192.168.0.5:30370/v2/models/torch2/infer -T iris-input.json -H "Cookie: authservice_session=${TOKEN}" -H "Host: ${SERVICE_HOSTNAME}"
 
-DEX 인증을 우회하는 것으로 설정하려면 https://1week.tistory.com/83 여기 확인
+curl -v 192.168.0.5:30370/v2/models/torch2/infer -d "${INPUT_DATA}" -H "Host: ${SERVICE_HOSTNAME}"
+
+#  dex에 관한 버추얼 서비스와 이 서비스가 사용하는 게이트웨이 확인
+kubectl get virtualservices.networking.istio.io --all-namespaces
+
+# kubeflow 게이트웨이의 정보를 확인
+kubectl get gateways.networking.istio.io -n kubeflow kubeflow-gateway -o yaml
+>>> kubeflow gateway를 이용하는 오브젝트는 모두 istio: ingressgateway가 selector로 지정된 것을 알 수 있음
 
 # 참고사항
 
